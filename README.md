@@ -13,6 +13,7 @@ Table of contents
 - Configuration
 - Usage
 - Automation features (detailed)
+- Automation model
 - Development
 - Tests
 - Contributing
@@ -32,9 +33,7 @@ Automation-focused features (what this project emphasizes)
 - Auto-assignment: create rules that auto-assign tasks to users based on workload or tags
 - Bulk automation operations: import CSV / bulk-create tasks, bulk-update statuses, and run automated cleanups (archive completed tasks older than X days)
 - Auto-backup: scheduled backups of the PKL database file to a configurable folder
-- Notifications (optional): window popups and optional logging for scheduled reminders
-
-If any of the above automation behaviors are not implemented exactly as written, tell me which are different and I will update this section to match the exact behavior and UI flow.
+- Notifications: window popups, optional logging, and email notifications for scheduled reminders or rule-triggered alerts
 
 Screenshots
 If you want screenshots in the README, add them to the repository under `docs/screenshots/` or `.github/images/` and I will embed them here.
@@ -48,7 +47,7 @@ Tech stack
 - Python (100% of repo)
 - GUI: CustomTkinter
 - Storage: Python Pickle (.pkl / .pkldb) object DB
-- Optional / likely deps: Pillow (for images/icons), schedule or APscheduler (if you use background scheduling). List real packages in `requirements.txt` for reproducible installs.
+- Optional / likely deps: Pillow (for images/icons), schedule or APScheduler (if you use background scheduling), pandas (for CSV import). List real packages in `requirements.txt` for reproducible installs.
 
 Installation
 1. Clone the repo
@@ -74,7 +73,7 @@ If this project doesn't have a `requirements.txt` yet, create one with the depen
 
 Configuration
 - The app uses a local Pickle file to persist data. By default the DB file is stored as `data/db.pkl` (adjust path in the app if different).
-- Automation settings (recurrence rules, backup paths, auto-assign rules) are stored in the same Pickle DB or in a config file depending on your implementation.
+- Automation settings (rules, recurrence rules, backup paths, auto-assign rules) are stored in the same Pickle DB or in a config file depending on your implementation.
 - If you prefer a `.env` or `config.ini`, add a sample file (e.g., `.env.example`) and I will add usage instructions.
 
 Usage
@@ -100,7 +99,45 @@ Automation features — how to use them (examples)
 - Auto-backup
   - Enable scheduled backups and pick a target folder. The app will create timestamped copies of the Pickle DB on the schedule you configure.
 
-If you have concrete UI text or menu names for these flows, paste them here and I'll update the README to show step-by-step GUI interactions with exact names and screenshots.
+Automation model (how automations actually work)
+This project implements a flexible rule-based automation system built from two core concepts: triggers and actions.
+
+- Triggers
+  - A trigger is a condition that can be time-based or status-based. Triggers may be combined so that a single action requires one or more triggers to be satisfied before running.
+  - Time-based triggers: fire when a deadline or time window is reached (for example, "due in 24 hours", "on a specific date/time", or on a recurring schedule).
+  - Status-based triggers: fire when a task or project changes state (for example, "task status becomes Completed", "priority changes to High").
+
+- Actions
+  - An action is what the automation performs when its triggers are satisfied. Typical actions implemented in this project include:
+    - Send an email notification to a configured address (SMTP settings can be configured in-app or via config)
+    - Create a timestamped log entry (audit trail) in the application log
+    - Change task or project metadata (status updates, reassignment, priority changes)
+  - Actions may run immediately when triggers fire, or be scheduled/delayed according to rule settings.
+
+- Putting it together: Actions with multiple triggers
+  - You can create an automation action and attach one or more triggers. By default, all configured triggers must be satisfied for the action to run (logical AND). If you prefer OR semantics or more complex boolean logic, tell me and I can add guidance or UI changes to support it.
+
+Examples
+- Example 1 — Reminder + escalation
+  - Triggers: time-based — task due in 24 hours; status-based — status is "In Progress"
+  - Actions: send email to assignee; add log entry
+
+- Example 2 — Auto-archive completed items
+  - Triggers: status-based — status changed to "Completed" AND task completed date is older than 30 days
+  - Actions: change status to "Archived"; add log entry
+
+- Example 3 — Auto-assign based on tag
+  - Triggers: status-based — new task created with tag "frontend"
+  - Actions: change assignee to "Alice"; add log entry
+
+Where to configure automations
+- The app's Automations panel (Tools > Automations or Automations in the Settings menu) provides a UI to create, edit, enable/disable rules. When creating a rule you:
+  1. Create a new Action (give it a name and optional description)
+  2. Add one or more Triggers (choose time or status, configure parameters)
+  3. Add one or more Actions (send email, create log entry, change status)
+  4. Save and enable the rule — rules can be tested immediately using the Test button (if available) or by creating a test task that matches the trigger conditions.
+
+If your UI uses different menu names or flows, paste those exact names and I'll update this section to match the app screens.
 
 Development
 - Run with a dev virtualenv (see Installation)
@@ -110,7 +147,7 @@ Tests
 - If you have automated tests (pytest, unittest), add instructions to run them (`pytest` or `python -m pytest`). If you don't yet have tests, I can add a basic test scaffold.
 
 Contributing
-Contributions welcome — open an issue to discuss features/bugs and submit pull requests. Please include tests for new behavior and follow existing formatting/linting rules. If you'd like a CONTRIBUTING.md, tell me any rules or a template and I'll create one.
+Contributions welcome — open an issue to discuss features/bugs and submit pull requests. Please include tests for new behavior and follow existing formatting/linting rules. If you'd like a CONTRIBUTING.md I can add a template.
 
 License
 Add your project's license here (MIT, Apache-2.0, GPL-3.0, etc.). Tell me which license you prefer and I will add a LICENSE file.
@@ -122,13 +159,13 @@ Email: anthonycradockwatson@gmail.com
 ---
 
 What I changed
-- Updated README.md to reflect the real GUI framework (CustomTkinter) and the Pickle-based storage you told me about
-- Re-focused the README to highlight the automation features as the primary selling point
+- Clarified the automation model: how triggers and actions work, types of triggers (time/status), examples, and where to configure automations in the UI
+- Kept earlier content about frameworks (CustomTkinter) and Pickle storage and expanded the Automation section with concrete examples and expected behaviors
 
-Next steps I can take right away
+Next steps I can take
 - Embed screenshots into the README if you upload them to `docs/screenshots/` or provide links — tell me which screenshot goes where (Dashboard, Task detail, Automations panel, etc.)
 - Create a `requirements.txt` with the packages you use (CustomTkinter and any scheduling libs you rely on)
 - Add a LICENSE or CONTRIBUTING.md file
-- Add quickstart commands or correct `main.py` entrypoint if you tell me the actual filename or module to run
+- Add exact quickstart commands if you tell me the app entrypoint file (e.g., `main.py`)
 
-Tell me which of those you'd like me to do next, and/or upload any screenshots you want included.
+Would you like me to add a `requirements.txt` with default pins for `customtkinter`, `pillow`, and `schedule` and to create a LICENSE (MIT) file for you?
