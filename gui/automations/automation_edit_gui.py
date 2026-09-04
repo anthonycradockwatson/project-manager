@@ -1,75 +1,8 @@
+from automations import Automation
+from gui.automations.automation_view_model import AutomationViewModel
 import customtkinter as ctk
-from classes import Manager
-from automations import Automation, TimeTrigger, StatusTrigger, EmailAction, StatusAction, LogAction
-from colour_bs import adjust_colour
+from gui.shared.deadline_window_gui import DeadlinePicker
 from PIL import Image
-
-class AutomationFrame(ctk.CTkFrame):
-    def __init__(self,master, width, height):
-        super().__init__(master=master)
-        self.width=int(0.8*width)
-        self.height=int(0.9*height)
-        self.configure(width=self.width, height=self.height)
-
-class AutomationWindow(ctk.CTkToplevel):
-    def __init__(self, project_id, project_name):
-        super().__init__()
-        self.project_id=project_id
-        self.width = 200
-        self.height=300
-        self.title(f"{project_name} - Automations")
-        self.geometry(f"{self.width}x{self.height}")
-        self.store=Manager()
-        self.project_obj=self.store.get_item(self.project_id)
-        self.attributes("-topmost", True)
-
-    def setup_window(self):
-        self.AutomationFrame = AutomationFrame(self,self.width, self.height)
-        self.AutomationFrame.grid(row=0, column=0, pady=15, padx=(15,5), sticky="nsew")
-        self.AutomationFrame.grid_propagate(False)
-        self.AutomationFrame.grid_columnconfigure(0, weight=1)
-        self.AutomationFrame.grid_columnconfigure(1, weight=1)
-
-        automation_names=[automation.name for automation in self.project_obj.automations]
-        automation_ids=[automation.uuid for automation in self.project_obj.automations]
-        button_colour = ctk.ThemeManager.theme["CTkButton"]["fg_color"]
-        different_button_colour = adjust_colour(button_colour[0])
-        automation_buttons = {}
-
-        for x, name in enumerate(automation_names):
-            pady = (10, 3) if x == 0 else 3
-            btn_width = int(0.9 * self.AutomationFrame.width)
-            pad_x = int(0.05 * self.AutomationFrame.width)
-            automation_buttons[x] = ctk.CTkButton(
-                self.AutomationFrame,
-                text=name,
-                command=lambda id=automation_ids[x], name=name: self.button_command(id, name, "edit"),
-                width=btn_width,
-            )
-            automation_buttons[x].grid(column=0, row=x+1, pady=pady, padx=pad_x, sticky="w")
-
-        add_automation_button = ctk.CTkButton(
-            self.AutomationFrame,
-            text="Add Automation",
-            command=lambda: self.button_command(None, "New Automation", "add"),
-            fg_color=different_button_colour,
-            width=int(0.9 * self.AutomationFrame.width),
-        )
-        add_automation_button.grid(row=len(automation_names)+1, column=0, pady=10, padx=int(0.05 * self.AutomationFrame.width))
-
-    def button_command(self, id, name, mode):
-        if mode=="edit":
-            edit_automation_screen = ChangeAutomationWindow(self.project_id, self,  "edit", id)
-
-        elif mode=="add":
-            add_automation_screen = ChangeAutomationWindow(self.project_id, self, "add")
-
-    def refresh_view(self):
-        self.store.reload()
-        self.project_obj=self.store.get_item(self.project_id)
-        for widget in list(self.winfo_children()):
-            widget.destroy()
-        self.setup_window()
 
 class ChangeAutomationWindow(ctk.CTkToplevel):
     def __init__(self, project_id, master_window, mode="add", automation_id=None):
@@ -79,14 +12,17 @@ class ChangeAutomationWindow(ctk.CTkToplevel):
         self.automation_id = automation_id
         self.mode = mode
         self.width = 450
-        self.height = 700
+        self.height = 560
+        self.base_trigger_height = 70
+        self.trigger_row_height = 48
+        self.max_trigger_height = 320
 
         self.title("Automation Setup")
         self.geometry(f"{self.width}x{self.height}")
         self.attributes("-topmost", True)
 
-        self.store = Manager()
-        self.project_obj = self.store.get_item(self.project_id)
+        self.view_model = AutomationViewModel()
+        self.project_obj = self.view_model.get_item(self.project_id)
         self.automation_obj = None
 
         if self.mode == "edit":
@@ -124,7 +60,7 @@ class ChangeAutomationWindow(ctk.CTkToplevel):
         # 3. Action Section
         ctk.CTkLabel(self, text="Action Type:").grid(row=4, column=0, padx=10, pady=10, sticky="w")
         self.action_type = ctk.CTkOptionMenu(
-            self, values=["Email", "Log", "Status"], command=lambda v: self.render_action_fields()
+            self, values=["Email", "Log", "Status"], command=lambda _value: self.render_action_fields()
         )
         self.action_type.grid(row=4, column=1, padx=10, pady=10, sticky="ew")
 
@@ -147,11 +83,11 @@ class ChangeAutomationWindow(ctk.CTkToplevel):
 
         # Populate existing triggers or create a default dynamic row
         existing_triggers = []
-        if self.automation_obj and hasattr(self.automation_obj, "action") and self.automation_obj.action:
+        if self.automation_obj and self.automation_obj.action:
             act = self.automation_obj.action
-            if hasattr(act, "type") and act.type:
+            if act.type:
                 self.action_type.set(act.type)
-            if hasattr(act, "triggers") and act.triggers:
+            if act.triggers:
                 existing_triggers = act.triggers
 
         if existing_triggers:
@@ -186,9 +122,9 @@ class ChangeAutomationWindow(ctk.CTkToplevel):
                 if initial_val and selected_type == initial_type:
                     widget.set(initial_val)
             else:
-                widget = ctk.CTkEntry(row_frame, placeholder_text="YYYY-MM-DD")
-                if initial_val and selected_type == initial_type:
-                    widget.insert(0, str(initial_val))
+                widget = DeadlinePicker(
+                    row_frame, initial_val if selected_type == initial_type else None
+                )
             widget.grid(row=0, column=1, padx=5, pady=5, sticky="ew")
             value_box[0] = widget
 
@@ -204,9 +140,19 @@ class ChangeAutomationWindow(ctk.CTkToplevel):
             row_frame.destroy()
             if row_data in self.trigger_rows:
                 self.trigger_rows.remove(row_data)
+            self.update_trigger_layout()
         del_btn = ctk.CTkButton(row_frame, text="", image=ctk.CTkImage(light_image=Image.open("assets/icons/close.png"), 
                                                                        size=(10, 10)), width=20, height=25, fg_color="#970E0E", hover_color="#D31C1C", command=remove_row)
         del_btn.grid(row=0, column=2, padx=5, pady=5)
+        self.update_trigger_layout()
+
+    def update_trigger_layout(self):
+        trigger_height = min(
+            self.max_trigger_height,
+            max(self.base_trigger_height, len(self.trigger_rows) * self.trigger_row_height),
+        )
+        self.triggers_container.configure(height=trigger_height)
+        self.geometry(f"{self.width}x{self.height + trigger_height - self.base_trigger_height}")
 
     def render_action_fields(self):
         for child in self.action_frame.winfo_children():
@@ -246,70 +192,64 @@ class ChangeAutomationWindow(ctk.CTkToplevel):
         act = self.automation_obj.action
         act_type = self.action_type.get()
 
-        if act_type == "Email" and hasattr(act, "sender_email"):
-            self.sender_email.insert(0, getattr(act, "sender_email", ""))
-            self.recipient_email.insert(0, getattr(act, "recipient_email", ""))
-            self.subject_entry.insert(0, getattr(act, "subject", ""))
-            self.email_message.insert("1.0", getattr(act, "message", ""))
-        elif act_type == "Log" and hasattr(act, "log_message"):
-            self.log_message.insert("1.0", getattr(act, "log_message", ""))
-        elif act_type == "Status" and hasattr(act, "target_status"):
-            self.new_status.set(getattr(act, "target_status", "Not Started"))
-
-    def collect_values(self):
-        name = self.name_entry.get().strip() or "Untitled Automation"
-
-        # Dynamically build all Trigger objects from the UI list
-        triggers_list = []
-        for _, type_menu, value_box in self.trigger_rows:
-            t_type = type_menu.get()
-            val = value_box[0].get() if value_box[0] else ""
-            if t_type == "Status":
-                triggers_list.append(StatusTrigger(self.project_obj, val))
-            elif t_type == "Deadline":
-                triggers_list.append(TimeTrigger(self.project_obj, val))
-
-        act_type = self.action_type.get()
         if act_type == "Email":
-            action = EmailAction(
-                self.project_obj,
-                self.sender_email.get(),
-                self.recipient_email.get(),
-                self.subject_entry.get(),
-                self.email_message.get("1.0", "end-1c"),
-                triggers_list
-            )
-        elif act_type == "Status":
-            action = StatusAction(self.project_obj, self.new_status.get(), triggers_list)
+            self.sender_email.insert(0, act.sender_email)
+            self.recipient_email.insert(0, act.recipient_email)
+            self.subject_entry.insert(0, act.subject)
+            self.email_message.insert("1.0", act.message)
         elif act_type == "Log":
-            action = LogAction(self.project_obj, self.log_message.get("1.0", "end-1c"), triggers_list)
-        else:
-            raise ValueError("Unknown Action Type")
-
-        return name, action
+            self.log_message.insert("1.0", act.log_message)
+        elif act_type == "Status":
+            self.new_status.set(act.target_status)
 
     def save_automation_and_close(self):
         try:
-            name, action = self.collect_values()
+            trigger_values = [
+                (
+                    type_menu.get(),
+                    value_box[0].get() if value_box[0] else "",
+                )
+                for _, type_menu, value_box in self.trigger_rows
+            ]
+            action_values = {}
+            action_type = self.action_type.get()
+            if action_type == "Email":
+                action_values = {
+                    "sender_email": self.sender_email.get(),
+                    "recipient_email": self.recipient_email.get(),
+                    "subject": self.subject_entry.get(),
+                    "message": self.email_message.get("1.0", "end-1c"),
+                }
+            elif action_type == "Status":
+                action_values["target_status"] = self.new_status.get()
+            elif action_type == "Log":
+                action_values["log_message"] = self.log_message.get("1.0", "end-1c")
+            name, action = self.view_model.collect_values(
+                self.project_obj,
+                self.name_entry.get().strip() or "Untitled Automation",
+                trigger_values,
+                action_type,
+                action_values,
+            )
         except Exception as e:
             print(f"Error collecting values: {e}")
             return
 
         if self.mode == "add":
             new_auto = Automation(self.project_obj, action, name=name)
-            self.project_obj.add_automation(new_auto)
+            self.view_model.save_automation(self.project_obj, new_auto)
         elif self.mode == "edit" and self.automation_obj:
             self.automation_obj.name = name
             self.automation_obj.action = action
 
-        self.store.save(self.project_obj)
+        self.view_model.save(self.project_obj)
         self.destroy()
         self.master.refresh_view()
 
     def delete_automation_and_close(self):
         if self.automation_id:
             self.project_obj.delete_automation(self.automation_id)
-            self.store.save(self.project_obj)
+            self.view_model.save(self.project_obj)
         self.destroy()
         self.master.refresh_view()
    

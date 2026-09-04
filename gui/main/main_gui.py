@@ -1,11 +1,11 @@
 import customtkinter as ctk
-from classes import Manager
-from gui.projects_gui import ProjectWindow
+from gui.main.main_view_model import MainViewModel
+from gui.project.project_gui import ProjectWindow
 from colour_bs import adjust_colour
 from PIL import Image
-from gui.setup_edit_window import AddWindow
+from gui.project.setup_edit_window import AddWindow
 from gui.tooltips import Tooltip
-from gui.automation_gui import AutomationWindow
+from gui.automations.automation_display_gui import AutomationWindow
 
 class ProjectFrame(ctk.CTkFrame):
     def __init__(self,master, width, height):
@@ -45,12 +45,13 @@ class MainWindow(ctk.CTk):
         self.ProjectFrame.grid_columnconfigure(0, weight=1)
         self.ProjectFrame.grid_columnconfigure(1, weight=1)
         
-        self.store = Manager()
+        self.view_model = MainViewModel()
         if self.edit_mode:
             self.toggle_edit_mode()
 
-        project_names = [item.name for item in self.store.load_all().values() if item.item_type == "Project"]
-        project_ids = [item.uuid for item in self.store.load_all().values() if item.item_type == "Project"]
+        projects = self.view_model.get_projects()
+        project_names = [item.name for item in projects]
+        project_ids = [item.uuid for item in projects]
 
         button_colour = ctk.ThemeManager.theme["CTkButton"]["fg_color"]
         different_button_colour = adjust_colour(button_colour[0])
@@ -114,7 +115,7 @@ class MainWindow(ctk.CTk):
 
     def button_command(self, id, name):
         if self.edit_mode:
-            obj=self.store.get_item(id)
+            obj=self.view_model.get_item(id)
             EditWindow=AddWindow(self, "Project",None, "edit",obj.uuid, obj.name, obj.status, obj.description, obj.deadline)
             EditWindow.setup_window()
         else:
@@ -131,8 +132,7 @@ class MainWindow(ctk.CTk):
         project_window.mainloop()
     
     def refresh_view(self):
-        self.store.reload()
+        self.view_model.reload()
         for widget in list(self.winfo_children()):
             widget.destroy()
         self.setup_window()
-

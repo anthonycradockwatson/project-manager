@@ -1,7 +1,11 @@
-from datetime import datetime
+from datetime import datetime, timedelta
 import os
 import uuid
+import smtplib
+from dotenv import load_dotenv
+from email.message import EmailMessage
 
+load_dotenv() 
 
 class Automation():
     def __init__(self, item, action, name=" "): # item is the task object, name is the name of the automation
@@ -11,14 +15,21 @@ class Automation():
         self.uuid=str(uuid.uuid4())
 
     def evaluate_status_triggers(self):
-        for trigger in self.action.triggers:
-            if trigger.type == "Status" and trigger.is_triggered(self.item):
+        for trigger in list(self.action.triggers):
+            if trigger.type == "Status" and trigger.is_triggered():
+                self.item.delete_automation(self.uuid)
                 self.action.execute()
+                return True
+        return False
 
     def evaluate_time_triggers (self):
-        for trigger in self.action.triggers:
-            if trigger.type == "Time" and trigger.is_triggered(self.item):
+        executed = False
+        for trigger in list(self.action.triggers):
+            if trigger.type == "Time" and trigger.is_triggered():
+                self.item.delete_automation(self.uuid)
                 self.action.execute()
+                executed = True
+        return executed
 
 #----------------------------------------------------------------------------------------------------------------------------------
 
@@ -29,22 +40,22 @@ class Trigger():
         self.target=target
         self.condition=condition
 
-    def is_triggered(self, item):
-        if getattr(item, self.condition) == self.target:
-            return True
+    def is_triggered(self):
+        return self.condition == self.target
     
 class TimeTrigger(Trigger):
-    def __init__(self, item, time):
-        super().__init__(item, "Time", time, "_deadline")
-        if item.deadline is None:
-            raise ValueError("Item must have a deadline to use Time Automations.")
+    def __init__(self, item, target_time):
+        super().__init__(item, "Time", target_time, "_deadline")
+        if self.target is None or type(self.target) is not datetime:
+            raise ValueError(f"Item {self.item.name} does not have a deadline set.")
 
-    def change_remaining_time(self, new_time):
-        new_time=int(new_time.total_seconds())
-        if new_time<=0:
-            self.remaining_time=0
-        else:
-            self.remaining_time = new_time
+    def is_triggered(self):
+        return datetime.now() >= self.target
+
+    def change_target_time(self, new_time):
+        if new_time <= datetime.now():
+            raise ValueError("Target time must be in the future.")
+        self.target=new_time
         
 class StatusTrigger(Trigger):
     def __init__(self, item, target_status):
@@ -52,6 +63,9 @@ class StatusTrigger(Trigger):
     
     def change_target_status(self, new_status):
         self.target=new_status
+
+    def is_triggered(self):
+        return self.item.status == self.target
 
 #---------------------------------------------------------------------------------------------------------------------------------- 
     
@@ -85,8 +99,30 @@ class EmailAction(Action):
         self.recipient_email = new_recipient_email
 
     def execute(self):
-        # Implement email sending logic here
-        pass
+        try:
+            self.send_email_via_smtp(self.sender_email, self.recipient_email, self.subject, self.message)
+        except Exception as e:
+            print(f"Failed to send email: {e}")
+
+    def send_email_via_smtp(self, sender_email, recipient_email, subject, message):
+        smtp_host = os.getenv("SMTP_HOST")
+        smtp_port = int(os.getenv("SMTP_PORT", "587"))
+        smtp_user = os.getenv("SMTP_USER")
+        smtp_password = os.getenv("SMTP_PASSWORD")
+
+        if not all([smtp_host, smtp_user, smtp_password]):
+            raise ValueError("Missing SMTP configuration.")
+
+        msg = EmailMessage()
+        msg["Subject"] = subject
+        msg["From"] = sender_email
+        msg["To"] = recipient_email
+        msg.set_content(message)
+
+        with smtplib.SMTP(smtp_host, smtp_port) as server:
+            server.starttls()
+            server.login(smtp_user, smtp_password)
+            server.send_message(msg)
 
 class StatusAction(Action):
     def __init__(self, item, target_status, triggers=None):

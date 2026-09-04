@@ -1,5 +1,6 @@
 import customtkinter as ctk
-from classes import Manager
+from gui.project.item_edit_view_model import ItemEditViewModel
+from gui.shared.deadline_window_gui import DeadlinePicker
 
 class AddWindow(ctk.CTkToplevel):
     def __init__(self, master, item_type, parent_id=None, mode="new", id=None, name=None, status="Not Started", description=None, deadline=None):
@@ -12,6 +13,8 @@ class AddWindow(ctk.CTkToplevel):
         self.status=status
         self.description=description
         self.deadline=deadline
+        self.success_label = None
+        self.error_label = None
         self.title("Add Task")
         self.width=500
         self.height=500
@@ -19,13 +22,15 @@ class AddWindow(ctk.CTkToplevel):
         self.lift()
         self.focus_force()
         self.attributes('-topmost', True)
-        self.store=Manager()
+        self.view_model=ItemEditViewModel()
     
     def setup_window(self):
         name, status, description, deadline = setup_edit_window(self, self.item_type, self.mode, self.name, self.status, self.description, self.deadline)
         create_text="Create" if self.mode == "new" else "Save"
         create_button= ctk.CTkButton(self, text=create_text, 
-            command=lambda:self.add_task_and_close(*get_edit_inputs(name, status, description, deadline)))
+            command=lambda:self.add_task_and_close(
+                *self.view_model.collect_values(name, status, description, deadline)
+            ))
         
         create_button.pack(pady=(10,4))
         cancel_button=ctk.CTkButton(self, text="Cancel", command=self.destroy)
@@ -35,17 +40,17 @@ class AddWindow(ctk.CTkToplevel):
             delete_button.pack(pady=(10,4))
 
     def delete_task(self):
-        self.store.delete(self.id)
+        self.view_model.delete(self.id)
         if self.parent_id is not None:
-            self.store.save(self.store.get_item(self.parent_id))
-        self.store.reload()
+            self.view_model.save(self.view_model.get_item(self.parent_id))
+        self.view_model.reload()
         self.destroy()
         self.master.refresh_view()
 
     def _show_error(self, message):
-        if hasattr(self, "success_label"):
+        if self.success_label is not None:
             self.success_label.destroy()
-        if hasattr(self, "error_label"):
+        if self.error_label is not None:
             self.error_label.destroy()
         self.error_label = ctk.CTkLabel(self, text=message, text_color="#A72A2A")
         self.error_label.pack(pady=4)
@@ -53,29 +58,29 @@ class AddWindow(ctk.CTkToplevel):
     def add_task_and_close(self, name, status, description, deadline):
         try:
             if self.mode=="edit":
-                obj=self.store.get_item(self.id)
+                obj=self.view_model.get_item(self.id)
                 if obj is None:
                     raise ValueError("The selected item could not be found.")
                 obj.name=name
                 obj.status=status
                 obj.description=description
                 obj.deadline=deadline
-                self.store.save(obj)
+                self.view_model.save_item(obj)
 
             else:
                 if self.item_type=="Project":
-                    self.store.add_project(name, description, deadline)
+                    self.view_model.create_item("Project", name, None, description, deadline)
                 else:
-                    parent_obj = self.store.get_item(self.parent_id)
+                    parent_obj = self.view_model.get_item(self.parent_id)
                     if parent_obj is None:
                         raise ValueError(f"Parent {self.item_type} parent could not be found.")
 
                     if self.item_type=="Task":
-                        self.store.add_task(name, parent_obj, description, deadline)
+                        self.view_model.create_item("Task", name, parent_obj, description, deadline)
                     elif self.item_type=="Subtask":
-                        self.store.add_subtask(name, parent_obj, description, deadline)
+                        self.view_model.create_item("Subtask", name, parent_obj, description, deadline)
 
-                    self.store.save(parent_obj)
+                    self.view_model.save(parent_obj)
             
             self.destroy()
             self.master.refresh_view()
@@ -115,25 +120,10 @@ def setup_edit_window(self, item_type, mode="new", name=None, status="Not Starte
     if description:
         description_text.insert("1.0",description)
 
-    deadline_entry = ctk.CTkEntry(self, placeholder_text="Deadline (DD-MM-YYYY)")
+    ctk.CTkLabel(self, text="Deadline").pack(pady=(4, 0))
+    deadline_entry = DeadlinePicker(self, deadline)
     deadline_entry.pack(pady=4)
-    if deadline:
-        deadline_entry.insert(0, deadline.strftime("%d-%m-%Y"))
 
-    deadline_hint = ctk.CTkLabel(self, text="Deadline must be a future date in DD-MM-YYYY format.", font=("default", 11))
+    deadline_hint = ctk.CTkLabel(self, text="Choose a date and enter time as HH:MM, or clear the deadline.", font=("default", 11))
     deadline_hint.pack(pady=(0, 4))
     return name_entry, status_menu, description_text, deadline_entry
-
-def get_edit_inputs(name_entry, status_menu, description_text, deadline):
-    name_entry=name_entry.get()
-    status=status_menu.get()
-    try:
-        description_text=description_text.get("1.0", "end")
-    except:
-        description_text=""
-    try:
-        deadline=deadline.get()
-    except:
-        deadline=None
-
-    return name_entry, status, description_text, deadline

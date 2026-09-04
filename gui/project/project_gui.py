@@ -1,8 +1,9 @@
-from classes import Manager, Project, Task, SubTask
+from gui.project.project_view_model import ProjectViewModel
 import customtkinter as ctk
 from colour_bs import adjust_colour
 from datetime import datetime
-from gui.setup_edit_window import AddWindow
+from gui.project.setup_edit_window import AddWindow
+from gui.automations.automation_display_gui import AutomationWindow
 from gui.tooltips import Tooltip
 from PIL import Image
 
@@ -25,8 +26,9 @@ class ProjectWindow(ctk.CTk):
         self.title(f"{project_name}")
         self.geometry(f"{self.width}x{self.height}")
         self.edit_mode=False
-        self.store=Manager()
-        self.project_obj=self.store.get_item(self.project_id)
+        self.ProjectFrame = None
+        self.view_model = ProjectViewModel()
+        self.project_obj=self.view_model.get_project(self.project_id)
         self.tasks_widgets = {}
         self.subtask_widgets = {}
         self.add_subtask_buttons={}
@@ -47,9 +49,9 @@ class ProjectWindow(ctk.CTk):
 
         self.ProjectFrame = ProjectFrame(self,self.width, self.height)
         self.ProjectFrame.grid_propagate(False)
-        self.ProjectFrame.grid_columnconfigure(0, weight=0)  # tasks stick left
-        self.ProjectFrame.grid_columnconfigure(1, weight=0)  # subtasks stay close
-        self.ProjectFrame.grid_columnconfigure(2, weight=0)  # buttons stay tight
+        self.ProjectFrame.grid_columnconfigure(0, weight=1)  # task names use remaining space
+        self.ProjectFrame.grid_columnconfigure(1, minsize=5)
+        self.ProjectFrame.grid_columnconfigure(2, minsize=55)
 
         if self.edit_mode:
             self.toggle_edit_mode()
@@ -57,8 +59,9 @@ class ProjectWindow(ctk.CTk):
         if self.project_obj is None:
             raise ValueError(f"Project with id {self.project_id} could not be loaded.")
 
-        task_names=[task.name for task in self.project_obj.tasks]
-        task_ids=[task.uuid for task in self.project_obj.tasks]
+        task_rows = self.view_model.get_task_rows(self.project_obj)
+        task_names=[row["task"].name for row in task_rows]
+        task_ids=[row["task"].uuid for row in task_rows]
         button_colour=ctk.ThemeManager.theme["CTkButton"]["fg_color"]
         different_button_colour=adjust_colour(button_colour[0])
 
@@ -92,13 +95,20 @@ class ProjectWindow(ctk.CTk):
         row_count=1
         for x in range(len(task_names)):
             
-            subtask_names=[subtask.name for subtask in self.project_obj.tasks[x].subtasks]
-            subtask_ids=[subtask.uuid for subtask in self.project_obj.tasks[x].subtasks]
+            subtasks = task_rows[x]["subtasks"]
+            subtask_names=[subtask.name for subtask in subtasks]
+            subtask_ids=[subtask.uuid for subtask in subtasks]
             pady = (10, 3) if x == 0 else 3
 
             self.tasks_widgets[f"{task_ids[x]}"] = ctk.CTkCheckBox(self.ProjectFrame, text=f"{task_names[x]}",
                     command=lambda id=task_ids[x]: self.checkbox_command(id, "Task"), width=0.1*self.ProjectFrame.width)
             self.tasks_widgets[f"{task_ids[x]}"].grid(column=0, row=row_count, pady=pady, padx=0.05*self.ProjectFrame.width, sticky="w")
+            ctk.CTkButton(
+                self.ProjectFrame, text="", width=48, height=25,
+                image=ctk.CTkImage(light_image=Image.open("assets/icons/workflow.png"), size=(15, 15)),
+                fg_color=different_button_colour,
+                command=lambda id=task_ids[x], name=task_names[x]: self.open_automation_window(id, name)
+            ).grid(column=2, row=row_count, pady=pady, padx=3, sticky="e")
             row_count+=1
 
             for i in range(len(subtask_names)):
@@ -106,6 +116,13 @@ class ProjectWindow(ctk.CTk):
                     command=lambda id=[subtask_ids[i], task_ids[x]]: self.checkbox_command(id[0], "Subtask", id[1]), 
                     width=0.1*self.ProjectFrame.width)
                 self.subtask_widgets[f"{task_ids[x]}_{subtask_ids[i]}"].grid(column=0, row=row_count, pady=pady, padx=0.1*self.ProjectFrame.width, sticky="nw")
+
+                ctk.CTkButton(
+                    self.ProjectFrame, text="", width=48, height=25,
+                    image=ctk.CTkImage(light_image=Image.open("assets/icons/workflow.png"), size=(15, 15)),
+                    fg_color=different_button_colour,
+                    command=lambda id=subtask_ids[i], name=subtask_names[i]: self.open_automation_window(id, name)
+                ).grid(column=2, row=row_count, pady=pady, padx=3, sticky="e")
                 row_count+=1
 
             self.add_subtask_buttons[f"{task_ids[x]}"] = ctk.CTkButton(self.ProjectFrame, text="Add Subtask",
@@ -119,7 +136,7 @@ class ProjectWindow(ctk.CTk):
         add_task_button.grid(row=row_count, column=0, pady=10, padx=0.05*self.ProjectFrame.width)
 
     def go_back(self):
-        from gui.main_gui import MainWindow
+        from gui.main.main_gui import MainWindow
         self.destroy()
         main_window = MainWindow()
         main_window.setup_window()
@@ -127,7 +144,7 @@ class ProjectWindow(ctk.CTk):
 
     def checkbox_command(self, id, class_type, task_id=None):
         if self.edit_mode:
-            obj=self.store.get_item(id)
+            obj=self.view_model.get_item(id)
             if obj is None:
                 print(f"Unable to edit object {id}: object not found.")
                 self.refresh_view()
@@ -138,18 +155,22 @@ class ProjectWindow(ctk.CTk):
             if class_type == "Task":
                 self.tasks_widgets[f"{id}"].destroy()
                 self.add_subtask_buttons[f"{id}"].destroy()
-                self.store.delete(id)
+                self.view_model.delete(id)
             else:
                 self.subtask_widgets[f"{task_id}_{id}"].destroy()
-                self.store.delete(id)
+                self.view_model.delete(id)
     
     def instantiate_new(self, class_type, parent_id=None):
         new_object_screen = AddWindow(self, class_type, parent_id)
         new_object_screen.setup_window()
 
+    def open_automation_window(self, item_id, item_name):
+        automation_window = AutomationWindow(item_id, item_name, self)
+        automation_window.setup_window()
+
     def refresh_view(self):
-        if hasattr(self, "ProjectFrame"):
+        if self.ProjectFrame is not None:
             self.ProjectFrame.destroy()
-        self.store.reload()
-        self.project_obj=self.store.get_item(self.project_id)
+        self.view_model.reload()
+        self.project_obj=self.view_model.get_project(self.project_id)
         self.setup_window()

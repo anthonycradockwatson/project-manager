@@ -1,84 +1,5 @@
-from datetime import datetime
+from datetime import date, datetime
 import uuid
-from db_function import ObjectStore
-from automations import Automation
-
-class Manager:
-    def __init__(self, filename="data/UserProjects.pkl"):
-        self.store = ObjectStore(filename)
-
-    def reload(self):
-        self.store.objects = self.store.load_all()
-        return self.store.objects
-
-    def add_project(self, name, description=None, deadline=None):
-        project = Project(name, description, deadline)
-        self.store.add(project)
-        return project
-
-    def add_task(self, name, project_obj, description="", deadline=None):
-        task = Task(name, description, deadline)
-        project_obj.tasks.append(task)
-        project_obj.task_uuids.append(task.uuid)
-        self.store.add(task)
-        self.store.update(project_obj)
-        return task
-
-    def add_subtask(self, name, task_obj, description="", deadline=None):
-        subtask = SubTask(name, description, deadline)
-        task_obj.subtasks.append(subtask)
-        task_obj.subtask_uuids.append(subtask.uuid)
-        self.store.add(subtask)
-        self.store.update(task_obj)
-        return subtask
-
-    def load_all(self):
-        objects = self.store.load_all()
-        clean_dict = {
-            key: val for key, val in objects.items() 
-            if not isinstance(val, Automation)
-        }
-        return clean_dict
-
-    def get_item(self, id):
-        return self.store.get_item(id)
-    
-    def save(self, obj):
-        self.store.update(obj)
-    
-    def delete(self, id):
-        self.reload()
-        obj=self.get_item(id)
-        if not obj:
-            return
-
-        if obj.item_type=="Project":
-            for task in list(obj.tasks):
-                self.delete(task.uuid)
-            self.store.delete(id)
-            return
-
-        if obj.item_type=="Task":
-            parent_objs=[item for item in self.store.objects.values() if item.item_type=="Project" and id in item.task_uuids]
-            if parent_objs:
-                parent_obj = parent_objs[0]
-                parent_obj.task_uuids = [task_id for task_id in parent_obj.task_uuids if task_id != id]
-                parent_obj.tasks = [task for task in parent_obj.tasks if task.uuid != id]
-                self.store.update(parent_obj)
-
-            for subtask in list(obj.subtasks):
-                self.delete(subtask.uuid)
-            self.store.delete(id)
-            return
-
-        parent_objs=[item for item in self.store.objects.values() if item.item_type=="Task" and id in item.subtask_uuids]
-        if parent_objs:
-            parent_obj = parent_objs[0]
-            parent_obj.subtask_uuids = [subtask_id for subtask_id in parent_obj.subtask_uuids if subtask_id != id]
-            parent_obj.subtasks = [subtask for subtask in parent_obj.subtasks if subtask.uuid != id]
-            self.store.update(parent_obj)
-
-        self.store.delete(id)
 
 class Item():
     def __init__(self, name, description="", deadline=None, status="Not Started", item_type=None, automations=[]):
@@ -113,22 +34,44 @@ class Item():
             if not deadline:
                 self._deadline = None
                 return
-            try:
-                deadline = datetime.strptime(deadline, "%d-%m-%Y").date()
-            except ValueError as exc:
-                raise ValueError("Deadline must be a valid date in DD-MM-YYYY format.") from exc
+
+            formats = [
+                "%d-%m-%Y %H:%M",
+                "%d-%m-%Y",
+                "%Y-%m-%d %H:%M",
+                "%Y-%m-%d",
+            ]
+            parsed = None
+            for date_format in formats:
+                try:
+                    parsed = datetime.strptime(deadline, date_format)
+                    break
+                except ValueError:
+                    continue
+
+            if parsed is None:
+                raise ValueError("Deadline must be a valid date in DD-MM-YYYY or DD-MM-YYYY HH:MM format.")
+
+            deadline = parsed
 
         if isinstance(deadline, datetime):
-            deadline = deadline.date()
+            pass
+        elif isinstance(deadline, date):
+            try:
+                deadline = datetime.combine(deadline, datetime.min.time())
+            except TypeError as exc:
+                raise ValueError("Deadline must be a valid date or datetime.") from exc
+        else:
+            raise ValueError("Deadline must be a valid date or datetime.")
 
-        if deadline <= datetime.now().date():
+        if deadline.time() == datetime.min.time():
+            deadline = deadline.replace(hour=0, minute=0)
+
+        if deadline <= datetime.now():
             raise ValueError("Deadline must be in the future.")
+
         self._deadline = deadline
 
-        for automation in self.automations:
-            for trigger in automation.action.triggers:
-                if trigger.type == "Time":
-                    trigger.change_remaining_time(self._deadline - datetime.now().date())
 
     @property
     def description(self):
@@ -145,7 +88,7 @@ class Item():
     @status.setter
     def status(self, status):
         self._status=status  
-        for automation in self.automations:
+        for automation in list(self.automations):
             automation.evaluate_status_triggers()
 
     def get_automation_obj(self, automation_id):
@@ -190,5 +133,3 @@ class SubTask(Item):
     def __init__(self, sub_task_name, description="", deadline=None, status="Not Started"):
         super().__init__(sub_task_name, description, deadline, status, item_type="SubTask", automations=[])
         
-
-
