@@ -1,171 +1,202 @@
 # Project Manager
 
-A lightweight, Python-based project management desktop app with a focus on automation features (GUI built with CustomTkinter, data stored using Pickle). Use this README as the canonical site for quickstart, usage, and the automation capabilities that make this project stand out.
+Project Manager is a lightweight desktop project-management application built
+with Python and CustomTkinter. It organizes work into projects, tasks, and
+subtasks, stores data locally, and provides automations for deadline and status
+events.
 
-Short repository description (use for GitHub repo description):
-Project Manager — a Python desktop app (CustomTkinter) with Pickle-backed storage and powerful automation to help you schedule, prioritize and bulk-manage tasks.
+## Features
 
-Table of contents
-- Features (automation-focused)
-- Screenshots
-- Tech stack
-- Installation
-- Configuration
-- Usage
-- Automation features (detailed)
-- Automation model
-- Development
-- Tests
-- Contributing
-- License
-- Contact
+- Create, edit, and delete projects, tasks, and subtasks.
+- Organize tasks and subtasks under their parent objects.
+- Track item names, descriptions, statuses, and deadlines.
+- Select deadlines with a calendar and editable `HH:MM` time field.
+- Add automation controls to projects, tasks, and subtasks.
+- Configure multiple triggers for an automation:
+  - **Status**: run when an item has a selected status.
+  - **Deadline**: run when a selected date and time is reached.
+- Configure actions that:
+  - Change an item status.
+  - Write a timestamped log file.
+  - Send an email through SMTP.
+- Evaluate newly created automations immediately.
+- Run deadline automations in a background polling thread.
+- Persist changes to a local Pickle database.
+- Customize the application appearance with the included themes.
 
-Features (high level)
-- GUI desktop app built with CustomTkinter for a modern native-like look and feel
-- Simple object DB using Python's pickle (PKL) for single-file storage — lightweight and portable
-- Add, edit, and remove projects and tasks
-- Assign tasks to people and track status and progress
-- Search and filter tasks
+## Requirements
 
-Automation-focused features (what this project emphasizes)
-- Automatic scheduling: define due dates and recurrence rules; the app can automatically create recurring tasks and reschedule completed ones
-- Smart prioritization: automation rules that prioritize tasks based on due date proximity, project importance, and estimated effort
-- Auto-assignment: create rules that auto-assign tasks to users based on workload or tags
-- Bulk automation operations: import CSV / bulk-create tasks, bulk-update statuses, and run automated cleanups (archive completed tasks older than X days)
-- Auto-backup: scheduled backups of the PKL database file to a configurable folder
-- Notifications: window popups, optional logging, and email notifications for scheduled reminders or rule-triggered alerts
+- Windows, macOS, or Linux
+- Python 3.10 or newer
+- `customtkinter`
+- `Pillow`
+- `python-dotenv` (required for email configuration)
 
-Screenshots
-If you want screenshots in the README, add them to the repository under `docs/screenshots/` or `.github/images/` and I will embed them here.
+## Installation
 
-Example markdown to include after you upload images:
-
-![Dashboard screenshot](docs/screenshots/dashboard.png)
-![Task detail screenshot](docs/screenshots/task_detail.png)
-
-Tech stack
-- Python (100% of repo)
-- GUI: CustomTkinter
-- Storage: Python Pickle (.pkl / .pkldb) object DB
-- Optional / likely deps: Pillow (for images/icons), schedule or APScheduler (if you use background scheduling), pandas (for CSV import). List real packages in `requirements.txt` for reproducible installs.
-
-Installation
-1. Clone the repo
+Clone the repository and create a virtual environment:
 
 ```bash
 git clone https://github.com/anthonycradockwatson/project-manager.git
 cd project-manager
+python -m venv .venv
 ```
 
-2. Create a virtual environment and install dependencies
+Activate the environment:
+
+```powershell
+# Windows PowerShell
+.\.venv\Scripts\Activate.ps1
+```
 
 ```bash
-python -m venv .venv
-# macOS / Linux
+# macOS/Linux
 source .venv/bin/activate
-# Windows (PowerShell)
-.\.venv\Scripts\Activate.ps1
-
-pip install -r requirements.txt
 ```
 
-If this project doesn't have a `requirements.txt` yet, create one with the dependencies (for example: `customtkinter`, `pillow`, `schedule`) or tell me which packages to pin and I can create it and commit it.
+Install the dependencies:
 
-Configuration
-- The app uses a local Pickle file to persist data. By default the DB file is stored as `data/db.pkl` (adjust path in the app if different).
-- Automation settings (rules, recurrence rules, backup paths, auto-assign rules) are stored in the same Pickle DB or in a config file depending on your implementation.
-- If you prefer a `.env` or `config.ini`, add a sample file (e.g., `.env.example`) and I will add usage instructions.
+```bash
+python -m pip install -r requirements.txt
+```
 
-Usage
-- GUI: run the main application file. Common example commands (adjust to match your actual entrypoint):
+## Running the application
+
+Start the desktop application from the repository root:
 
 ```bash
 python main.py
-# or, if your package provides a module entrypoint
-python -m project_manager
 ```
 
-- The GUI provides menus and dialogs to create projects and tasks. See the Automation section below for how to configure automation rules.
+The application starts the automation polling thread and then opens the main
+project window. Keep the process running for deadline automations to be
+evaluated.
 
-Automation features — how to use them (examples)
-- Recurring tasks
-  - Create a task and mark it as recurring (daily/weekly/monthly). The app will auto-create the next occurrence when the current one is completed.
-- Smart prioritization
-  - Define project importance and estimated effort. Enable the prioritization automation rule and the app will reorder task lists to surface the highest priority items.
-- Auto-assignment
-  - Define rules (e.g., tasks tagged "frontend" assigned to "Alice", or round-robin assignment among team members). Use the Automations panel to add/edit rules.
-- Bulk operations
-  - Import CSV files to create many tasks at once. Use the Import action in Tools > Import CSV. The same Tools menu can run bulk status updates or archive operations.
-- Auto-backup
-  - Enable scheduled backups and pick a target folder. The app will create timestamped copies of the Pickle DB on the schedule you configure.
+## Using the application
 
-Automation model (how automations actually work)
-This project implements a flexible rule-based automation system built from two core concepts: triggers and actions.
+### Projects, tasks, and subtasks
 
-- Triggers
-  - A trigger is a condition that can be time-based or status-based. Triggers may be combined so that a single action requires one or more triggers to be satisfied before running.
-  - Time-based triggers: fire when a deadline or time window is reached (for example, "due in 24 hours", "on a specific date/time", or on a recurring schedule).
-  - Status-based triggers: fire when a task or project changes state (for example, "task status becomes Completed", "priority changes to High").
+1. Start the application and create a project.
+2. Open a project to add tasks.
+3. Add subtasks from the task list.
+4. Use edit mode to change an item's name, description, status, or deadline.
+5. Use the refresh controls after making changes in another window.
 
-- Actions
-  - An action is what the automation performs when its triggers are satisfied. Typical actions implemented in this project include:
-    - Send an email notification to a configured address (SMTP settings can be configured in-app or via config)
-    - Create a timestamped log entry (audit trail) in the application log
-    - Change task or project metadata (status updates, reassignment, priority changes)
-  - Actions may run immediately when triggers fire, or be scheduled/delayed according to rule settings.
+Deleting a project also deletes its tasks and subtasks. Deleting a task removes
+its subtasks and updates the parent project's stored relationships.
 
-- Putting it together: Actions with multiple triggers
-  - You can create an automation action and attach one or more triggers. By default, all configured triggers must be satisfied for the action to run (logical AND). If you prefer OR semantics or more complex boolean logic, tell me and I can add guidance or UI changes to support it.
+### Deadlines
 
-Examples
-- Example 1 — Reminder + escalation
-  - Triggers: time-based — task due in 24 hours; status-based — status is "In Progress"
-  - Actions: send email to assignee; add log entry
+The deadline picker provides:
 
-- Example 2 — Auto-archive completed items
-  - Triggers: status-based — status changed to "Completed" AND task completed date is older than 30 days
-  - Actions: change status to "Archived"; add log entry
+- A calendar for selecting the date.
+- An `HH:MM` input for selecting the time.
+- A **Clear** button for removing a deadline.
 
-- Example 3 — Auto-assign based on tag
-  - Triggers: status-based — new task created with tag "frontend"
-  - Actions: change assignee to "Alice"; add log entry
+Deadlines are stored as Python `datetime` values. Empty deadlines are stored as
+`None`, and deadlines must be in the future when assigned.
 
-Where to configure automations
-- The app's Automations panel (Tools > Automations or Automations in the Settings menu) provides a UI to create, edit, enable/disable rules. When creating a rule you:
-  1. Create a new Action (give it a name and optional description)
-  2. Add one or more Triggers (choose time or status, configure parameters)
-  3. Add one or more Actions (send email, create log entry, change status)
-  4. Save and enable the rule — rules can be tested immediately using the Test button (if available) or by creating a test task that matches the trigger conditions.
+## Automations
 
-If your UI uses different menu names or flows, paste those exact names and I'll update this section to match the app screens.
+Open the workflow button beside a project, task, or subtask to view its
+automations. Create an automation by providing a name, one or more triggers,
+and an action.
 
-Development
-- Run with a dev virtualenv (see Installation)
-- Linting and formatting suggestions: black, flake8. Add pre-commit hooks if desired.
+When a new automation is saved, its status and deadline triggers are checked
+immediately. Deadline triggers are also checked by the background worker every
+five seconds while `main.py` is running.
 
-Tests
-- If you have automated tests (pytest, unittest), add instructions to run them (`pytest` or `python -m pytest`). If you don't yet have tests, I can add a basic test scaffold.
+Automations are one-shot: after a trigger fires, the action runs and the
+automation is removed from the item. The updated item is then saved.
 
-Contributing
-Contributions welcome — open an issue to discuss features/bugs and submit pull requests. Please include tests for new behavior and follow existing formatting/linting rules. If you'd like a CONTRIBUTING.md I can add a template.
+### Actions
 
-License
-Add your project's license here (MIT, Apache-2.0, GPL-3.0, etc.). Tell me which license you prefer and I will add a LICENSE file.
+#### Status
 
-Contact
-Maintainer: anthonycradockwatson
-Email: anthonycradockwatson@gmail.com
+Sets the associated item's status to the selected value. Status values currently
+used by the interface are:
 
----
+- `Not Started`
+- `In Progress`
+- `Completed`
 
-What I changed
-- Clarified the automation model: how triggers and actions work, types of triggers (time/status), examples, and where to configure automations in the UI
-- Kept earlier content about frameworks (CustomTkinter) and Pickle storage and expanded the Automation section with concrete examples and expected behaviors
+#### Log
 
-Next steps I can take
-- Embed screenshots into the README if you upload them to `docs/screenshots/` or provide links — tell me which screenshot goes where (Dashboard, Task detail, Automations panel, etc.)
-- Create a `requirements.txt` with the packages you use (CustomTkinter and any scheduling libs you rely on)
-- Add a LICENSE or CONTRIBUTING.md file
-- Add exact quickstart commands if you tell me the app entrypoint file (e.g., `main.py`)
+Writes a timestamped log entry to the `logs` directory. Log files are generated
+when the action executes.
 
-Would you like me to add a `requirements.txt` with default pins for `customtkinter`, `pillow`, and `schedule` and to create a LICENSE (MIT) file for you?
+#### Email
+
+Sends an email using SMTP. Configure the SMTP connection in a `.env` file in
+the repository root:
+
+```dotenv
+SMTP_HOST=smtp.example.com
+SMTP_PORT=587
+SMTP_USER=your-user
+SMTP_PASSWORD=your-password
+```
+
+The sender address, recipient address, subject, and message are configured on
+the automation itself. Do not commit `.env` or real credentials to source
+control.
+
+## Project architecture
+
+The application is intentionally split into layers:
+
+```text
+GUI -> View models -> Manager -> ObjectStore
+```
+
+- `gui/`: CustomTkinter windows, widgets, and view models.
+  - `gui/main/`: main project list.
+  - `gui/project/`: project, task, and subtask views and editing.
+  - `gui/automations/`: automation list and editing windows.
+  - `gui/shared/`: reusable widgets and base view-model behavior.
+- `classes.py`: domain objects (`Project`, `Task`, `SubTask`, and `Item`).
+- `automations.py`: automation, trigger, and action domain classes.
+- `manager.py`: application-level operations and persistence façade.
+- `db_function.py`: Pickle-backed `ObjectStore`.
+- `main.py`: application entry point and deadline polling worker.
+- `assets/`: themes and image assets used by the interface.
+- `data/UserProjects.pkl`: default local data file created and updated by the
+  application.
+
+The Manager keeps storage access out of the GUI and domain objects. The object
+store saves the complete object graph to the Pickle file whenever an object is
+added, updated, or deleted.
+
+## Data and backups
+
+Data is stored locally in `data/UserProjects.pkl`. Pickle files can execute
+code when loaded, so only open data files from trusted sources. Back up the
+data file before making manual changes or experimenting with incompatible code
+changes.
+
+The `logs/` directory contains log-action output and can be safely archived or
+cleared when the application is not writing to it.
+
+## Development
+
+Run commands from the repository root with the virtual environment activated.
+Dependencies are listed in `requirements.txt`; the project currently has no
+dedicated test suite or dependency lock file.
+Before submitting changes:
+
+1. Check Python syntax for modified modules.
+2. Run the application and exercise the affected UI flow.
+3. Verify that changes remain after restarting the application.
+4. Avoid committing `.env`, Pickle data, generated logs, or virtual-environment
+   files.
+
+## Contributing
+
+Open an issue to describe a bug or proposed feature before making substantial
+changes. Pull requests should explain the behavior changed and include focused
+validation steps.
+
+## License
+
+No license file is currently included. Until a license is added, the repository
+should be treated as source-available rather than freely redistributable.
